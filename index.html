@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KALORA - UMS Activity &amp; Officer Calendar System</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-logo">K</div>
+        <div class="brand-text">
+          <div class="brand-name">KALORA</div>
+          <div class="brand-sub">UMS Activity &amp;<br>Officer Calendar System</div>
+        </div>
+      </div>
+      <div class="role-tag" id="sidebarRoleTag"></div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-note">
+        Prototaip frontend sahaja.<br>Tiada backend / pangkalan data.
+      </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- ============ MAIN ============ -->
+    <div class="main">
+      <header class="topbar">
+        <button class="menu-toggle" id="menuToggle" title="Menu">&#9776;</button>
+        <h1 class="page-title" id="pageTitle"></h1>
+        <div class="topbar-right">
+          <div class="role-sim">
+            <label for="roleSelect">Simulate Role</label>
+            <select id="roleSelect">
+              <option value="urusetia">Urusetia</option>
+              <option value="pa">PA / NC</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button class="bell" id="bellBtn" title="Notifications">&#128276;
+            <span class="bell-count" id="bellCount" hidden></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="content" id="content"></main>
+    </div>
+  </div>
+
+  <!-- ============ NOTIFICATION PANEL ============ -->
+  <div class="notif-panel" id="notifPanel" hidden>
+    <div class="notif-head">
+      <span>Makluman</span>
+      <button class="btn btn-sm btn-outline" data-act="clear-notifs">Buang Semua</button>
+    </div>
+    <div class="notif-list" id="notifList"></div>
+  </div>
+
+  <!-- ============ MODAL: PENGURUSAN VENUE (ADMIN) ============ -->
+  <div class="modal-backdrop" id="venueModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="venueModalTitle">
+      <div class="modal-head">
+        <h3 id="venueModalTitle">Tambah Venue Baharu</h3>
+        <button type="button" class="modal-x" id="venueModalX" title="Tutup">&times;</button>
+      </div>
+      <form id="formVenue" novalidate>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group full" id="vgNama">
+              <label for="vNama">Nama Venue <span class="req">*</span></label>
+              <input type="text" id="vNama" placeholder="cth. Dewan Canselor UMS">
+              <div class="form-error">Sila masukkan nama venue.</div>
+            </div>
+
+            <div class="form-group" id="vgKod">
+              <label for="vKod">Kod Venue <span class="req">*</span></label>
+              <input type="text" id="vKod" placeholder="cth. DCU" style="text-transform:uppercase">
+              <div class="form-error">Sila masukkan kod venue (mesti unik).</div>
+            </div>
+
+            <div class="form-group" id="vgKapasiti">
+              <label for="vKapasiti">Kapasiti (pax) <span class="req">*</span></label>
+              <input type="number" id="vKapasiti" min="1" step="1" placeholder="cth. 3000">
+              <div class="form-error">Sila masukkan kapasiti (nombor &ge; 1).</div>
+            </div>
+
+            <div class="form-group full" id="vgLokasi">
+              <label for="vLokasi">Lokasi / Bangunan <span class="req">*</span></label>
+              <input type="text" id="vLokasi" placeholder="cth. Bangunan Canselor, UMS">
+              <div class="form-error">Sila masukkan lokasi / bangunan venue.</div>
+            </div>
+
+            <div class="form-group full" id="vgFasiliti">
+              <label for="vFasiliti">Fasiliti</label>
+              <input type="text" id="vFasiliti" list="venueFacilityList"
+                     placeholder="Projektor, PA System, VIP Holding Room">
+              <datalist id="venueFacilityList">
+                <option value="Projektor"></option>
+                <option value="PA System"></option>
+                <option value="Sound System"></option>
+                <option value="Smart Board"></option>
+                <option value="Video Conference"></option>
+                <option value="Pentas Utama"></option>
+                <option value="VIP Lounge"></option>
+                <option value="VIP Holding Room"></option>
+                <option value="Air Conditioning"></option>
+              </datalist>
+              <div class="form-hint">Pilih daripada senarai atau taip sendiri. Pisahkan antara fasiliti dengan koma (,).</div>
+              <div class="form-error">Fasiliti adalah pilihan (tidak wajib diisi).</div>
+            </div>
+
+            <div class="form-group full">
+              <label for="vStatus">Status Venue</label>
+              <select id="vStatus">
+                <option value="aktif">Aktif &mdash; boleh ditempah</option>
+                <option value="penyelenggaraan">Dalam Penyelenggaraan &mdash; disekat</option>
+              </select>
+              <div class="form-hint">Venue berstatus <b>Dalam Penyelenggaraan</b> masih kelihatan dalam dropdown, tetapi tempahan akan <b>disekat</b> sehingga venue diaktifkan semula.</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-outline" id="venueModalCancel">Batal</button>
+          <button type="submit" class="btn" id="venueModalSubmit">Tambah Venue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ TOAST ============ -->
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
