@@ -134,6 +134,7 @@
     role: 'urusetia',
     view: 'dashboard',
     viewParams: {},
+    currentOfficer: null,
     draftActivityId: null,
     activities: [],
     requests: [],
@@ -753,6 +754,9 @@ function seedData() {
     if (!state.roles || !state.roles.length) state.roles = INVITATION_ROLES.slice();
     if (!state.officers || !state.officers.length) state.officers = OFFICERS.map(function (n) { return { name: n, role: 'urusetia' }; });
     else state.officers = state.officers.map(function (o) { return (typeof o === 'string') ? { name: o, role: 'urusetia' } : o; });
+    if (!state.currentOfficer) {
+      state.currentOfficer = (state.officers[0] && state.officers[0].name) || OFFICERS[0];
+    }
     state.venues = normalizeVenues(state.venues);
     linkVenues();
     state.settings = Object.assign(
@@ -818,6 +822,20 @@ function seedData() {
 
     // Role select
     $('roleSelect').value = state.role;
+
+    // Officer persona simulator (untuk paparan kalendar peribadi)
+    var officerSel = $('officerSelect');
+    if (officerSel) {
+      var officerNames = (state.officers || []).map(function (o) { return o.name; });
+      if (state.currentOfficer && officerNames.indexOf(state.currentOfficer) === -1) {
+        officerNames.unshift(state.currentOfficer);
+      }
+      officerSel.innerHTML = officerNames.map(function (n) {
+        return '<option value="' + esc(n) + '"' + (n === state.currentOfficer ? ' selected' : '') + '>' + esc(n) + '</option>';
+      }).join('');
+    }
+    var officerSimWrap = $('officerSimWrap');
+    if (officerSimWrap) officerSimWrap.style.display = state.role === 'pa' ? '' : 'none';
 
     // Bell count
     var unread = state.notifications.filter(function (n) { return !n.read; }).length;
@@ -1340,9 +1358,23 @@ function seedData() {
     }
     a.conflicts = a.officers.map(function (o) {
       var found = null;
+      /* 1) Jadual simulasi sedia ada (data demo). */
       FAKE_SCHEDULES.forEach(function (f) {
+        if (found) return;
         if (f.officer === o.name && overlaps(a.masaMula, a.masaTamat, f.start, f.end)) found = f;
       });
+      /* 2) Entri kalendar sebenar (termasuk aktiviti peribadi yang ditambah pegawai). */
+      if (!found) {
+        (state.calendar || []).forEach(function (c) {
+          if (found) return;
+          if (c.status === 'Cancelled') return;
+          if (c.officer !== o.name) return;
+          if (c.date !== a.tarikh) return;
+          if (overlaps(a.masaMula, a.masaTamat, c.start, c.end)) {
+            found = { officer: c.officer, start: c.start, end: c.end, title: c.title };
+          }
+        });
+      }
       return { officer: o.name, role: o.peranan, attendance: o.kehadiran, conflict: found };
     });
     a.checked = true;
@@ -1577,7 +1609,13 @@ function seedData() {
   }
 
   function rCalendar() {
-    var filter = viewParams.officer || 'semua';
+    /* Halaman officer (peranan PA): paparan peribadi, tiada penapis Pegawai.
+       Halaman Urusetia: paparan global dengan penapis Pegawai. */
+    var isOfficerPage = state.role === 'pa';
+    var filter = viewParams.officer;
+    if (filter === undefined || filter === null || filter === '') {
+      filter = isOfficerPage ? (state.currentOfficer || 'semua') : 'semua';
+    }
     var view = viewParams.calView === 'grid' ? 'grid' : 'list';
     var entries = state.calendar.slice().sort(function (x, y) {
       if (x.date !== y.date) return x.date < y.date ? -1 : 1;
@@ -1585,6 +1623,7 @@ function seedData() {
     });
 
     var officers = ['semua'];
+    if (state.currentOfficer && officers.indexOf(state.currentOfficer) === -1) officers.push(state.currentOfficer);
     entries.forEach(function (e) {
       if (officers.indexOf(e.officer) === -1) officers.push(e.officer);
     });
@@ -1603,14 +1642,21 @@ function seedData() {
         ' data-args=\'{"view":"' + id + '"}\' aria-pressed="' + (on ? 'true' : 'false') + '">' + label + '</button>';
     }
 
+    var addBtn = isOfficerPage
+      ? '<button class="btn btn-sm" data-act="open-officer-act">+ Tambah Jadual / Aktiviti Peribadi</button>'
+      : '';
+    var officerFilter = isOfficerPage
+      ? ''
+      : '<div class="role-sim"><label for="selOfficerFilter" style="display:block">Pegawai</label>' +
+        '<select id="selOfficerFilter" data-calfilter>' + selOpts + '</select></div>';
+
     var head = '<div class="card">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
-      '<h3 style="margin:0">Officer Schedule</h3>' +
+      '<div style="display:flex;gap:10px;align-items:center"><h3 style="margin:0">Officer Schedule</h3>' + addBtn + '</div>' +
       '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">' +
       '<div class="cal-tabs" role="group" aria-label="Paparan kalendar pegawai">' +
       viewBtn('list', 'Agenda') + viewBtn('grid', 'Calendar') + '</div>' +
-      '<div class="role-sim"><label for="selOfficerFilter" style="display:block">Pegawai</label>' +
-      '<select id="selOfficerFilter" data-calfilter>' + selOpts + '</select></div>' +
+      officerFilter +
       '</div></div>' +
       (view === 'grid' ? officerCalTools() : '') +
       '<div class="msg info" style="margin-top:12px"><div class="ico">&#8505;</div><div>' +
@@ -2543,6 +2589,9 @@ function seedData() {
         case 'cal-view':
           show('calendar', Object.assign({}, viewParams, { calView: args.view }));
           break;
+        case 'open-officer-act':
+          openOfficerActModal();
+          break;
         case 'oc-prev':
           show('calendar', shiftOfficerCal(-1));
           break;
@@ -2580,6 +2629,19 @@ function seedData() {
     // Role simulator
     $('roleSelect').addEventListener('change', function () {
       setRoleTo(this.value, 'Simulasi peranan: anda kini bertindak sebagai ' + ROLE_LABEL[this.value] + '.');
+    });
+
+    // Officer persona simulator (paparan kalendar peribadi)
+    $('officerSelect').addEventListener('change', function () {
+      state.currentOfficer = this.value;
+      save();
+      audit('Pegawai semasa (simulasi) ditukar ke: ' + this.value);
+      if (state.view === 'calendar' && state.role === 'pa') {
+        show('calendar', Object.assign({}, viewParams, { officer: this.value }));
+      } else {
+        renderChrome();
+      }
+      toast('Paparan peribadi: ' + this.value);
     });
 
     function setRoleTo(role, msg) {
@@ -2664,6 +2726,17 @@ function seedData() {
       if (e.key === 'Escape' && !$('venueModal').hidden) closeVenueModal();
     });
 
+    /* Modal Tambah Aktiviti Peribadi Pegawai / PA */
+    $('officerActModal').addEventListener('click', function (e) {
+      if (e.target === this) closeOfficerActModal();
+    });
+    $('officerActModalX').addEventListener('click', closeOfficerActModal);
+    $('officerActModalCancel').addEventListener('click', closeOfficerActModal);
+    $('formOfficerAct').addEventListener('submit', handleOfficerActivitySubmit);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !$('officerActModal').hidden) closeOfficerActModal();
+    });
+
     // Mobile menu
     $('menuToggle').addEventListener('click', function () {
       $('sidebar').classList.add('open');
@@ -2672,6 +2745,62 @@ function seedData() {
     $('sidebarBackdrop').addEventListener('click', closeSidebar);
   }
 
+
+  function openOfficerActModal() {
+    $('officerActModal').hidden = false;
+    $('oaNama').value = '';
+    $('oaTarikh').value = todayISO();
+    $('oaMasaMula').value = '';
+    $('oaMasaTamat').value = '';
+    $('oaLokasi').value = '';
+    $('ogNama').classList.remove('invalid');
+    $('ogTarikh').classList.remove('invalid');
+    $('ogMasaMula').classList.remove('invalid');
+    $('ogMasaTamat').classList.remove('invalid');
+    var who = $('oaUntukPegawai');
+    if (who) who.value = state.currentOfficer || '-';
+    var nama = $('oaNama');
+    if (nama && nama.focus) nama.focus();
+  }
+
+  function closeOfficerActModal() {
+    $('officerActModal').hidden = true;
+  }
+
+  function handleOfficerActivitySubmit(e) {
+    e.preventDefault();
+    var nama = $('oaNama').value.trim();
+    var tarikh = $('oaTarikh').value.trim();
+    var mula = $('oaMasaMula').value.trim();
+    var tamat = $('oaMasaTamat').value.trim();
+    var lokasi = $('oaLokasi').value.trim();
+    var ok = true;
+    if (!nama) { $('ogNama').classList.add('invalid'); ok = false; } else { $('ogNama').classList.remove('invalid'); }
+    if (!tarikh) { $('ogTarikh').classList.add('invalid'); ok = false; } else { $('ogTarikh').classList.remove('invalid'); }
+    if (!mula) { $('ogMasaMula').classList.add('invalid'); ok = false; } else { $('ogMasaMula').classList.remove('invalid'); }
+    if (!tamat) { $('ogMasaTamat').classList.add('invalid'); ok = false; } else { $('ogMasaTamat').classList.remove('invalid'); }
+    if (!ok) { toast('Sila lengkapkan medan wajib.', 'amber'); return; }
+    if (mula >= tamat) { $('ogMasaMula').classList.add('invalid'); $('ogMasaTamat').classList.add('invalid'); toast('Masa tamat mesti selepas masa mula.', 'red'); return; }
+    var officer = state.currentOfficer || 'Aktiviti Peribadi';
+    state.calendar.push({
+      id: uid('c_'),
+      date: tarikh,
+      start: mula,
+      end: tamat,
+      title: nama,
+      officer: officer,
+      role: 'Peribadi',
+      status: 'Confirmed',
+      venue: lokasi,
+      venueId: '',
+      personal: true
+    });
+    save();
+    audit('Aktiviti peribadi ditambah (' + officer + '): ' + nama);
+    toast('Aktiviti peribadi berjaya ditambah.');
+    closeOfficerActModal();
+    show('calendar', Object.assign({}, viewParams, { officer: officer }));
+  }
   function closeSidebar() {
     $('sidebar').classList.remove('open');
     $('sidebarBackdrop').classList.remove('show');

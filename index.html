@@ -8,8 +8,6 @@
 </head>
 <body>
   <div class="app">
-
-    <!-- ============ SIDEBAR ============ -->
     <aside class="sidebar" id="sidebar">
       <div class="brand">
         <div class="brand-logo">K</div>
@@ -25,8 +23,6 @@
       </div>
     </aside>
     <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-
-    <!-- ============ MAIN ============ -->
     <div class="main">
       <header class="topbar">
         <button class="menu-toggle" id="menuToggle" title="Menu">&#9776;</button>
@@ -40,17 +36,18 @@
               <option value="admin">Admin</option>
             </select>
           </div>
+          <div class="role-sim" id="officerSimWrap">
+            <label for="officerSelect">Simulate Officer</label>
+            <select id="officerSelect"></select>
+          </div>
           <button class="bell" id="bellBtn" title="Notifications">&#128276;
             <span class="bell-count" id="bellCount" hidden></span>
           </button>
         </div>
       </header>
-
       <main class="content" id="content"></main>
     </div>
   </div>
-
-  <!-- ============ NOTIFICATION PANEL ============ -->
   <div class="notif-panel" id="notifPanel" hidden>
     <div class="notif-head">
       <span>Makluman</span>
@@ -58,8 +55,6 @@
     </div>
     <div class="notif-list" id="notifList"></div>
   </div>
-
-  <!-- ============ MODAL: PENGURUSAN VENUE (ADMIN) ============ -->
   <div class="modal-backdrop" id="venueModal" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="venueModalTitle">
       <div class="modal-head">
@@ -74,29 +69,23 @@
               <input type="text" id="vNama" placeholder="cth. Dewan Canselor UMS">
               <div class="form-error">Sila masukkan nama venue.</div>
             </div>
-
             <div class="form-group" id="vgKod">
               <label for="vKod">Kod Venue <span class="req">*</span></label>
               <input type="text" id="vKod" placeholder="cth. DCU" style="text-transform:uppercase">
-              <div class="form-error">Sila masukkan kod venue (mesti unik).</div>
+              <div class="form-error">Sila masukkan kod venue (min. 2 aksara).</div>
             </div>
-
             <div class="form-group" id="vgKapasiti">
-              <label for="vKapasiti">Kapasiti (pax) <span class="req">*</span></label>
-              <input type="number" id="vKapasiti" min="1" step="1" placeholder="cth. 3000">
-              <div class="form-error">Sila masukkan kapasiti (nombor &ge; 1).</div>
+              <label for="vKapasiti">Kapasiti <span class="req">*</span></label>
+              <input type="number" id="vKapasiti" placeholder="cth. 300" min="1" step="1">
+              <div class="form-error">Sila masukkan kapasiti venue (>= 1).</div>
             </div>
-
             <div class="form-group full" id="vgLokasi">
-              <label for="vLokasi">Lokasi / Bangunan <span class="req">*</span></label>
-              <input type="text" id="vLokasi" placeholder="cth. Bangunan Canselor, UMS">
-              <div class="form-error">Sila masukkan lokasi / bangunan venue.</div>
+              <label for="vLokasi">Lokasi</label>
+              <input type="text" id="vLokasi" placeholder="cth. Bangunan Pusat Aktiviti Pelajar, UMS">
             </div>
-
             <div class="form-group full" id="vgFasiliti">
               <label for="vFasiliti">Fasiliti</label>
-              <input type="text" id="vFasiliti" list="venueFacilityList"
-                     placeholder="Projektor, PA System, VIP Holding Room">
+              <input type="text" id="vFasiliti" list="venueFacilityList" placeholder="Projektor, PA System, VIP Holding Room">
               <datalist id="venueFacilityList">
                 <option value="Projektor"></option>
                 <option value="PA System"></option>
@@ -111,7 +100,6 @@
               <div class="form-hint">Pilih daripada senarai atau taip sendiri. Pisahkan antara fasiliti dengan koma (,).</div>
               <div class="form-error">Fasiliti adalah pilihan (tidak wajib diisi).</div>
             </div>
-
             <div class="form-group full">
               <label for="vStatus">Status Venue</label>
               <select id="vStatus">
@@ -130,9 +118,56 @@
     </div>
   </div>
 
-  <!-- ============ TOAST ============ -->
-  <div class="toast-wrap" id="toastWrap"></div>
+  <!-- ============ MODAL: TAMBAH AKTIVITI PERIBADI PEGAWAI / PA ============ -->
+  <div class="modal-backdrop" id="officerActModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="officerActModalTitle">
+      <div class="modal-head">
+        <h3 id="officerActModalTitle">+ Tambah Jadual / Aktiviti Peribadi</h3>
+        <button type="button" class="modal-x" id="officerActModalX" title="Tutup">&times;</button>
+      </div>
+      <form id="formOfficerAct" novalidate>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group full">
+              <label for="oaUntukPegawai">Untuk Pegawai (Profil Semasa)</label>
+              <input type="text" id="oaUntukPegawai" readonly>
+              <div class="form-hint">Aktiviti peribadi ini akan dikaitkan dengan profil pegawai semasa (Simulate Officer di bar atas).</div>
+            </div>
+            <div class="form-group full" id="ogNama">
+              <label for="oaNama">Nama Aktiviti / Temujanji <span class="req">*</span></label>
+              <input type="text" id="oaNama" placeholder="cth. Mesyuarat Panitia, Kerja Tulis, Konsultasi">
+              <div class="form-error">Sila masukkan nama aktiviti.</div>
+            </div>
+            <div class="form-group" id="ogTarikh">
+              <label for="oaTarikh">Tarikh <span class="req">*</span></label>
+              <input type="date" id="oaTarikh">
+              <div class="form-error">Sila pilih tarikh.</div>
+            </div>
+            <div class="form-group" id="ogMasaMula">
+              <label for="oaMasaMula">Masa Mula <span class="req">*</span></label>
+              <input type="time" id="oaMasaMula">
+              <div class="form-error">Sila masukkan masa mula.</div>
+            </div>
+            <div class="form-group" id="ogMasaTamat">
+              <label for="oaMasaTamat">Masa Tamat <span class="req">*</span></label>
+              <input type="time" id="oaMasaTamat">
+              <div class="form-error">Sila masukkan masa tamat.</div>
+            </div>
+            <div class="form-group full" id="ogLokasi">
+              <label for="oaLokasi">Lokasi / Bilik / Catatan <span style="color:var(--muted);font-weight:400">(Pilihan)</span></label>
+              <input type="text" id="oaLokasi" placeholder="cth. Bilik Mesyuarat, Online">
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-outline" id="officerActModalCancel">Batal</button>
+          <button type="submit" class="btn" id="officerActModalSubmit">Simpan Aktiviti Peribadi</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
+  <div class="toast-wrap" id="toastWrap"></div>
   <script src="script.js"></script>
 </body>
 </html>
