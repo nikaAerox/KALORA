@@ -126,7 +126,9 @@ ok(h.indexOf('cal-day') !== -1, 'senarai agenda (blok cal-day) dipaparkan');
 ok(h.indexOf('Mesyuarat Pengurusan UMS') !== -1, 'entri benih (c1) dalam agenda');
 ok(h.indexOf('vgrid') === -1, 'tiada grid jadual dalam mod Agenda');
 ok(h.indexOf('cal-tools') === -1, 'tiada toolbar grid dalam mod Agenda');
-ok(h.indexOf('selOfficerFilter') !== -1, 'penapis pegawai wujud');
+ok(h.indexOf('selOfficerFilter') !== -1, 'penapis pegawai wujud pada halaman Urusetia');
+ok(h.indexOf('data-act="open-officer-act"') === -1, 'butang Tambah Aktiviti Peribadi tiada pada halaman Urusetia');
+ok(elements['officerSimWrap'].style.display === 'none', 'Simulate Officer tersembunyi pada halaman Urusetia');
 ok(h.indexOf('badge green">Confirmed') !== -1, 'legenda status dipaparkan');
 
 console.log('3. Tukar ke mod Calendar (grid mingguan)');
@@ -244,10 +246,35 @@ ok(h.indexOf('class="vgrid') === -1, 'grid tiada dalam mod Agenda');
 ok(h.indexOf('cal-tools') === -1, 'toolbar grid tiada dalam mod Agenda');
 ok(h.indexOf('selOfficerFilter') !== -1, 'penapis pegawai kekal dalam mod Agenda');
 
-console.log('11. Integriti sumber');
+console.log('11. Halaman officer/PA: paparan peribadi + aktiviti peribadi');
+(elements['roleSelect'].listeners.change || []).forEach(function (fn) { fn.call({ value: 'pa' }); });
+fireNav('calendar');
+h = content();
+ok(elements['officerSimWrap'].style.display === '', 'Simulate Officer dipaparkan pada halaman officer/PA');
+ok(h.indexOf('data-act="open-officer-act"') !== -1, 'butang Tambah Aktiviti Peribadi dipaparkan');
+ok(h.indexOf('selOfficerFilter') === -1, 'pilihan Pegawai dibuang pada halaman officer/PA');
+
+fireAct('open-officer-act');
+ok(elements['officerActModal'] && elements['officerActModal'].hidden === false, 'modal aktiviti peribadi dibuka');
+ok(elements['oaUntukPegawai'] && elements['oaUntukPegawai'].value === 'Ahmad bin Ali', 'modal memaparkan pegawai semasa');
+
+elements['oaNama'].value = 'Kerja Tulis Laporan';
+elements['oaTarikh'].value = '2026-09-25';
+elements['oaMasaMula'].value = '08:00';
+elements['oaMasaTamat'].value = '09:00';
+elements['oaLokasi'].value = 'Bilik Kerja';
+(elements['formOfficerAct'].listeners.submit || []).forEach(function (fn) { fn({ preventDefault: function () {} }); });
+ok(elements['officerActModal'].hidden === true, 'modal ditutup selepas simpan');
+h = content();
+ok(h.indexOf('Kerja Tulis Laporan') !== -1, 'aktiviti peribadi dirender dalam kalendar');
+ok(h.indexOf('Peranan: Peribadi') !== -1, 'entri peribadi bertanda Peranan: Peribadi');
+ok(h.indexOf('Program Universiti (jadual sedia ada)') === -1, 'entri pegawai lain ditapis keluar (lalai peribadi)');
+ok(h.indexOf('selOfficerFilter') === -1, 'pilihan Pegawai kekal tiada selepas simpan');
+
+console.log('12. Integriti sumber');
 var src = require('fs').readFileSync(path.join(__dirname, 'script.js'), 'utf8');
 var fnCount = (src.match(/^\s*function /gm) || []).length;
-ok(fnCount === 129, 'bilangan fungsi script.js = 129 (dapat: ' + fnCount + ')');
+ok(fnCount === 132, 'bilangan fungsi script.js = 132 (dapat: ' + fnCount + ')');
 var names = (src.match(/^\s*function ([A-Za-z0-9_]+)/gm) || []).map(function (s) {
   return s.trim().replace(/^function /, '');
 });

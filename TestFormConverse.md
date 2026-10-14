@@ -394,3 +394,62 @@ Kiraan kesibukan hari di `officerMonthBody()`: `entries.filter(e => e.date === i
 - Entri **Cancelled tidak dikira** sebagai kesibukan — ia tidak mengisi masa pegawai.
 - State bulan dikekalkan melalui `calDate` (hujung `'YYYY-MM-DD'`); `addMonths` memastikan tarikh jangkar sentiasa sah (hari di-clamp).
 - Sel `mday` ialah `<button>` sebenar dengan `data-act="oc-day"` supaya ujian `fireAct()` dapat memacunya tanpa pelayar.
+
+## 10. Sesi 6 - Tambah Aktiviti Peribadi + Skop Kalendar Pegawai
+
+**Tarikh:** 13–14 Oct 2026
+**Tugas:** Menambah 'Tambah Aktiviti Peribadi' untuk pegawai/PA di kalendar, skopkan paparan kalendar kepada profil pegawai semasa, dan pastikan conflict detection membaca entri baharu.
+
+### 10.1 Pelaksanaan
+
+**`script.js` (129 → 132 fungsi; 3 fungsi sedia ada dibaiki):**
+
+| Fungsi / Sasaran | Peranan |
+|---|---|
+| `state.currentOfficer` (baharu, state) | Nama profil pegawai semasa (persona). Lalai = pegawai pertama dalam `state.officers`. Dipersist dalam `localStorage`. |
+| `renderChrome()` (ubah) | Mengisi `#officerSelect` dengan senarai pegawai dan menanda pilihan semasa; `#officerSimWrap` disembunyikan untuk Admin. |
+| `rCalendar()` (ubah) | Lalai penapis = `state.currentOfficer` apabila peranan `pa` (paparan peribadi); `'semua'` untuk Urusetia (tingkah laku lama dikekalkan). Pegawai semasa sentiasa dimasukkan dalam dropdown walaupun tiada entri. |
+| `openOfficerActModal()` / `closeOfficerActModal()` (baiki) | Sintaks rosak (`\officerActModal`) dibaiki kepada `$('officerActModal')`; prefill tarikh, tetapkan `#oaUntukPegawai`. |
+| `handleOfficerActivitySubmit()` (baiki) | Simpan entri ke `state.calendar` dengan `officer: state.currentOfficer`, `role: 'Peribadi'`, `status: 'Confirmed'`, `personal: true`, `venue: lokasi`; turut disimpan ke `localStorage`. |
+| `checkAvailability()` (ubah) | Selepas `FAKE_SCHEDULES`, turut mengimbas `state.calendar` (peserta sama, tarikh sama, tidak `Cancelled`) supaya aktiviti peribadi dikesan sebagai konflik. |
+
+**Tindakan/events:**
+- `cal-view`/`oc-*`/`oc-day` kekal; lalai penapis peribadi bagi `pa` kekal kerana semua handler menggabung `Object.assign({}, viewParams, …)`.
+- Aksi baharu `open-officer-act` → `openOfficerActModal()`.
+- `#officerSelect` change → tetapkan `state.currentOfficer`; jika dalam halaman kalendar & peranan `pa`, papar semula ditapis kepada pegawai tersebut.
+- Modal aktiviti peribadi: backdrop click, butang X, Batal, submit `#formOfficerAct`, dan `Escape` (wiring selari dengan modal venue).
+
+**`index.html`:**
+- Bar atas ditambah selektor persona **Simulate Officer** (`#officerSimWrap` > `#officerSelect`).
+- Modal `#officerActModal` dikemas struktur (satu baris → HTML berformat) + medan baca-sahaja **Untuk Pegawai (Profil Semasa)** (`#oaUntukPegawai`).
+
+**Yang TIDAK diubah:** tab Officer/Venue, mod Agenda/Harian/Mingguan/Bulanan, `rVenueCalendar()` + `venueCalCtx`, CRUD venue, alur PA/NC, `NAVS`.
+
+### 10.2 Pengesahan (Sesi 6)
+
+- `node --check script.js` → **OK**.
+- `smoke-ocal.js` (dikemas kini) → **87/87 lulus** (79 kes lama + 8 kes baharu):
+  - Modal aktiviti peribadi dibuka, memaparkan pegawai semasa, ditutup selepas simpan.
+  - Entri peribadi dirender (`Peranan: Peribadi`).
+  - Skop peribadi role PA: hanya entri pegawai semasa; penapis lalai = pegawai semasa.
+  - Integriti sumber: **132 fungsi**, 0 duplikat.
+
+### 10.3 Keputusan reka bentuk
+- Persona pegawai disimulasikan (`Simulate Officer`) kerana prototaip tiada pengesahan identiti sebenar.
+- Skop peribadi lalai digunakan untuk peranan **PA** sahaja; Urusetia kekal melihat semua pegawai (elak regresi).
+- Aktiviti peribadi berstatus **Confirmed** terus dikira sebagai *busy slot* dan dibaca oleh `checkAvailability()`.
+
+### 10.4 Penambahbaikan susulan (satu halaman, dua skop)
+Permintaan: Urusetia buang "Simulate Officer"; halaman officer/PA buang pilihan "Pegawai" di Officer Schedule.
+
+| Sasaran | Tindakan |
+|---|---|
+| `renderChrome()` | `#officerSimWrap` (Simulate Officer) dipaparkan **hanya** untuk peranan `pa`; tersembunyi untuk Urusetia & Admin. |
+| `rCalendar()` | Butang **+ Tambah Jadual / Aktiviti Peribadi** dipaparkan **hanya** pada halaman officer/PA. |
+| `rCalendar()` | Pilihan **Pegawai** (`#selOfficerFilter`) dipaparkan **hanya** pada halaman Urusetia (urusetia boleh tapis semua pegawai); dibuang pada halaman officer/PA (paparan peribadi). |
+
+Rasional: halaman officer/PA = paparan peribadi (persona ditetapkan melalui Simulate Officer), jadi penapis Pegawai berlebihan. Halaman Urusetia = paparan pengurusan, jadi penapis Pegawai dikekalkan tetapi Simulate Officer dibuang.
+
+`smoke-ocal.js` → **91/91 lulus** (penambahan 4 kes: Simulate Officer tersembunyi & butang peribadi tiada pada Urusetia; Simulate Officer muncul & pilihan Pegawai tiada pada officer/PA).
+
+
