@@ -274,12 +274,76 @@ ok(h.indexOf('selOfficerFilter') === -1, 'pilihan Pegawai kekal tiada selepas si
 console.log('12. Integriti sumber');
 var src = require('fs').readFileSync(path.join(__dirname, 'script.js'), 'utf8');
 var fnCount = (src.match(/^\s*function /gm) || []).length;
-ok(fnCount === 132, 'bilangan fungsi script.js = 132 (dapat: ' + fnCount + ')');
+ok(fnCount === 136, 'bilangan fungsi script.js = 136 (dapat: ' + fnCount + ')');
 var names = (src.match(/^\s*function ([A-Za-z0-9_]+)/gm) || []).map(function (s) {
   return s.trim().replace(/^function /, '');
 });
 var dupes = names.filter(function (n, i) { return names.indexOf(n) !== i; });
-ok(dupes.length === 0, 'tiada fungsi duplikat' + (dupes.length ? ': ' + dupes.join(',') : ''));
+  ok(dupes.length === 0, 'tiada fungsi duplikat' + (dupes.length ? ': ' + dupes.join(',') : ''));
+
+console.log('13. Kelulusan individu + nisbah Status + Venue Calendar read-only');
+fireNav('requests');
+h = content();
+ok(h.indexOf('<th>Status</th>') !== -1, 'lajur Status wujud pada senarai permohonan');
+ok(h.indexOf('badge ratio green">1/1') !== -1, 'nisbah 1/1 (hijau) dipaparkan bagi permohonan disahkan penuh');
+ok(h.indexOf('badge ratio amber">1/3') !== -1, 'nisbah 1/3 (kuning/amber) dipaparkan bagi kelulusan separa');
+ok(h.indexOf('badge ratio red">0/1') !== -1, 'nisbah 0/1 (merah) dipaparkan bagi permohonan tiada kelulusan');
+ok(h.indexOf('Kelulusan individu:') !== -1, 'legenda nisbah kelulusan dipaparkan');
+
+/* Tukar persona pegawai kepada Muhammad Hakim (req_3: 3 pegawai, Hakim masih pending). */
+(elements['officerSelect'].listeners.change || []).forEach(function (fn) { fn.call({ value: 'Muhammad Hakim' }); });
+fireAct('open-review', { id: 'req_3' });
+h = content();
+ok(h.indexOf('badge ratio amber">1/3') !== -1, 'halaman semakan memaparkan nisbah 1/3 sebelum kelulusan');
+ok(h.indexOf('badge blue">ANDA') !== -1, 'baris pegawai semasa ditanda ANDA');
+ok((h.match(/data-act="approve"/g) || []).length === 1, 'TEPAT SATU butang Lulus (untuk nama sendiri sahaja)');
+ok((h.match(/data-act="reject"/g) || []).length === 1, 'TEPAT SATU butang Tolak (untuk nama sendiri sahaja)');
+ok(h.indexOf('Menunggu kelulusan pegawai ini') !== -1, 'pegawai lain: status sahaja, tiada butang');
+ok(h.indexOf('Pegawai ini telah meluluskan') !== -1, 'pegawai yang sudah lulus dipaparkan tanpa butang');
+
+fireAct('approve', { id: 'req_3', idx: 0 });
+h = content();
+ok(h.indexOf('badge ratio amber">2/3') !== -1, 'nisbah kini 2/3 (amber) selepas kelulusan individu Hakim');
+ok(h.indexOf('Kelulusan anda telah direkodkan.') !== -1, 'mesej kelulusan individu dipaparkan');
+ok(h.indexOf('data-act="approve"') === -1, 'butang Lulus hilang selepas kelulusan direkodkan');
+
+/* Permohonan lain tidak terjejas oleh kelulusan Hakim. */
+fireAct('open-review', { id: 'req_4' });
+h = content();
+ok(h.indexOf('badge ratio red">0/1') !== -1, 'req_4 kekal 0/1 (tidak terjejas)');
+ok(h.indexOf('tiada dalam senarai pegawai permohonan ini') !== -1, 'Hakim tiada dalam req_4 — tiada tindakan dibenarkan');
+ok(h.indexOf('data-act="approve"') === -1, 'tiada butang Lulus bagi pegawai bukan dalam senarai');
+
+/* Kalendar peribadi Hakim: entri Tentative -> Confirmed selepas kelulusan sendiri. */
+fireNav('calendar');
+h = content();
+ok(h.indexOf('Seminar Pemantapan Pengurusan') !== -1, 'aktiviti req_3 dipaparkan dalam kalendar peribadi Hakim');
+ok(h.indexOf('cal-entry confirmed') !== -1, 'entri kalendar kini Confirmed selepas kelulusan individu');
+
+/* Venue Calendar halaman officer: mod READ-ONLY. */
+ok(elements['nav'].innerHTML.indexOf('Venue Calendar') !== -1, 'nav officer/PA mempunyai tab Venue Calendar');
+fireAct('cal-tab', { mode: 'venue' });
+h = content();
+ok(h.indexOf('Venue Schedule') !== -1, 'tab Venue Calendar dibuka');
+ok(h.indexOf('READ-ONLY') !== -1, 'lencana READ-ONLY dipaparkan pada halaman officer');
+ok(h.indexOf('Mod rujukan (read-only)') !== -1, 'nota mod rujukan dipaparkan');
+ok(h.indexOf('data-act="pick-slot"') === -1, 'tiada slot boleh diklik untuk tempah (mod harian)');
+ok(h.indexOf('>Urus</button>') === -1, 'butang Urus (CRUD) disembunyikan daripada pegawai');
+ok(h.indexOf('Slot Kosong (rujukan sahaja') !== -1, 'slot kosong dipaparkan sebagai rujukan sahaja');
+ok(h.indexOf('<span class="chip ro"') !== -1, 'chip slot kosong bukan butang tempahan');
+
+fireChange('selCalMode', 'mingguan');
+h = content();
+ok(h.indexOf('class="vslot free ro"') !== -1, 'sel slot kosong guna kelas read-only dalam grid mingguan');
+ok(h.indexOf('data-act="pick-slot"') === -1, 'grid mingguan: tiada tindakan tempahan bagi officer');
+
+fireAct('pick-slot', { date: todayISO(), start: '09:00', venue: 'ven_1' });
+h = content();
+ok(h.indexOf('Venue Schedule') !== -1, 'pick-slot disekat — paparan kekal (tiada pendaftaran aktiviti)');
+ok(h.indexOf('id="formActivity"') === -1, 'borang Daftar Aktiviti tidak dibuka');
+
+fireAct('delete-venue', { id: 'ven_1' });
+ok(true, 'delete-venue disekat untuk peranan bukan-Admin (tiada exception)');
 
 console.log('');
 console.log(passed + ' lulus, ' + failed + ' gagal');

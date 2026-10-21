@@ -329,6 +329,21 @@ tr:hover td { background: #f8fbff; }
 .badge.amber  { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
 .badge.gray   { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
 
+/* Lencana nisbah kelulusan individu (cth: 1/5, 3/5, 5/5)
+   Hijau = semua lulus | Kuning/Amber = separa | Merah = tiada kelulusan */
+.badge.ratio {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  min-width: 56px;
+  text-align: center;
+  padding: 3px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.badge.ratio.green { background: var(--green); color: #fff; border: 1px solid var(--green); }
+.badge.ratio.amber { background: var(--amber); color: #fff; border: 1px solid var(--amber); }
+.badge.ratio.red   { background: var(--red);   color: #fff; border: 1px solid var(--red); }
+
 /* ---------------- MESSAGES / ALERTS ---------------- */
 
 .msg {
@@ -680,6 +695,11 @@ td.vslot { height: 46px; padding: 3px; vertical-align: top; background: #fff; }
 td.vslot.free { cursor: pointer; }
 td.vslot.free:hover { background: var(--green-bg); box-shadow: inset 0 0 0 2px var(--green-border); }
 td.vslot.busy { background: #fbfdff; }
+
+/* Venue Calendar halaman officer: mod READ-ONLY (rujukan sahaja) */
+td.vslot.free.ro { cursor: default; background: #fafcff; }
+td.vslot.free.ro:hover { background: #fafcff; box-shadow: none; }
+.chip.ro { cursor: default; background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
 
 .vslot-book {
   background: var(--amber-bg);

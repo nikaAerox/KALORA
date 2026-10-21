@@ -7,6 +7,8 @@
 > Nota: fail ini merekodkan kesemua sesi perbualan. Sesi 1 (asas KALORA) ada di Bahagian 1–5.
 > Sesi 2 (Modul Pengurusan Venue) di Bahagian 6. Sesi 3 (gabungan kalendar) di Bahagian 7.
 > Sesi 4 (dua paparan Kalendar Pegawai) di Bahagian 8. Sesi 5 (paparan Bulanan) di Bahagian 9.
+> Sesi 6 (Aktiviti Peribadi + skop kalendar) di Bahagian 10.
+> Sesi 7 (Kelulusan individu + nisbah Status + Venue Calendar read-only) di Bahagian 11.
 
 ---
 
@@ -400,7 +402,27 @@ Kiraan kesibukan hari di `officerMonthBody()`: `entries.filter(e => e.date === i
 **Tarikh:** 13–14 Oct 2026
 **Tugas:** Menambah 'Tambah Aktiviti Peribadi' untuk pegawai/PA di kalendar, skopkan paparan kalendar kepada profil pegawai semasa, dan pastikan conflict detection membaca entri baharu.
 
-### 10.1 Pelaksanaan
+### 10.1 Perbualan
+
+**User:** Meminta penambahbaikan halaman **Officer / PA** (prototaip frontend-only): (1) *Officer Add Activity* — pegawai boleh tambah aktiviti/jadual peribadi sendiri ke kalendar; (2) *Personal Calendar Scoping* — kalendar memaparkan jadual pegawai tersebut sahaja; (3) *Flexible Calendar Filters* — sokongan paparan Bulanan/Mingguan/Harian; (4) kekalkan semua modul lain (urusetia, kelulusan PA/NC, admin) seperti sedia ada.
+
+**Assistant (baca-sahaja):** Menyemak `TestForm` (`index.html`, `script.js`, `style.css`) dan `smoke-ocal.js`. Dapatan:
+- Modul kalendar pegawai sedia ada lengkap (Agenda + grid Harian/Mingguan/Bulanan, `viewParams` `calView`/`calGridMode`/`calDate`).
+- Terdapat **kerja separuh siap** daripada sesi terdahulu: modal `#officerActModal` dalam `index.html` (dimampatkan jadi satu baris) dan 3 fungsi `openOfficerActModal()` / `closeOfficerActModal()` / `handleOfficerActivitySubmit()` yang **rosak** (`\officerActModal`, `\oaNama`, …) — menyebabkan `script.js` gagal di-parse (`node --check` gagal).
+- Tiada pengikatan peristiwa untuk butang `open-officer-act`, borang `#formOfficerAct`, atau butang modal.
+- `checkAvailability()` hanya membaca `FAKE_SCHEDULES` — **tidak** membaca `state.calendar`, jadi aktiviti peribadi baharu tidak dikesan.
+
+**Assistant (keputusan reka bentuk):** Prototaip tiada pengesahan identiti, jadi persona pegawai disimulasikan melalui `state.currentOfficer` + selektor **Simulate Officer**. Skop peribadi lalai hanya untuk peranan **PA** (Urusetia kekal melihat semua — elak regresi). `checkAvailability()` diperluas untuk turut membaca entri `state.calendar`.
+
+**User:** *proceed* → dilaksanakan (lihat 10.2).
+
+**User:** *buat improvement: (1) urusetia page buang feature "simulate officer"; (2) officer page buang feature pilihan "Pegawai" di officer schedule.*
+
+**Assistant:** Memisahkan dua skop: **Simulate Officer** dipaparkan hanya pada halaman officer/PA; pilihan **Pegawai** (`#selOfficerFilter`) dibuang pada halaman officer/PA tetapi dikekalkan pada halaman Urusetia (paparan pengurusan). Butang **+ Tambah Jadual / Aktiviti Peribadi** juga dipaparkan hanya pada halaman officer/PA. Dilaksanakan (lihat 10.5).
+
+**User:** *save and updated our conversation in TestFormConverse.md* → transkrip sesi ini direkodkan dalam bahagian ini.
+
+### 10.2 Pelaksanaan
 
 **`script.js` (129 → 132 fungsi; 3 fungsi sedia ada dibaiki):**
 
@@ -425,7 +447,7 @@ Kiraan kesibukan hari di `officerMonthBody()`: `entries.filter(e => e.date === i
 
 **Yang TIDAK diubah:** tab Officer/Venue, mod Agenda/Harian/Mingguan/Bulanan, `rVenueCalendar()` + `venueCalCtx`, CRUD venue, alur PA/NC, `NAVS`.
 
-### 10.2 Pengesahan (Sesi 6)
+### 10.3 Pengesahan (Sesi 6)
 
 - `node --check script.js` → **OK**.
 - `smoke-ocal.js` (dikemas kini) → **87/87 lulus** (79 kes lama + 8 kes baharu):
@@ -434,12 +456,12 @@ Kiraan kesibukan hari di `officerMonthBody()`: `entries.filter(e => e.date === i
   - Skop peribadi role PA: hanya entri pegawai semasa; penapis lalai = pegawai semasa.
   - Integriti sumber: **132 fungsi**, 0 duplikat.
 
-### 10.3 Keputusan reka bentuk
+### 10.4 Keputusan reka bentuk
 - Persona pegawai disimulasikan (`Simulate Officer`) kerana prototaip tiada pengesahan identiti sebenar.
 - Skop peribadi lalai digunakan untuk peranan **PA** sahaja; Urusetia kekal melihat semua pegawai (elak regresi).
 - Aktiviti peribadi berstatus **Confirmed** terus dikira sebagai *busy slot* dan dibaca oleh `checkAvailability()`.
 
-### 10.4 Penambahbaikan susulan (satu halaman, dua skop)
+### 10.5 Penambahbaikan susulan (satu halaman, dua skop)
 Permintaan: Urusetia buang "Simulate Officer"; halaman officer/PA buang pilihan "Pegawai" di Officer Schedule.
 
 | Sasaran | Tindakan |
@@ -451,5 +473,81 @@ Permintaan: Urusetia buang "Simulate Officer"; halaman officer/PA buang pilihan 
 Rasional: halaman officer/PA = paparan peribadi (persona ditetapkan melalui Simulate Officer), jadi penapis Pegawai berlebihan. Halaman Urusetia = paparan pengurusan, jadi penapis Pegawai dikekalkan tetapi Simulate Officer dibuang.
 
 `smoke-ocal.js` → **91/91 lulus** (penambahan 4 kes: Simulate Officer tersembunyi & butang peribadi tiada pada Urusetia; Simulate Officer muncul & pilihan Pegawai tiada pada officer/PA).
+
+---
+
+## 11. Sesi 7 — Kelulusan Individu + Nisbah Status X/Y + Venue Calendar Read-Only
+
+**Tarikh:** 20 Oct 2026
+**Tugas:** Tiga penambahbaikan frontend mengikut spesifikasi Melayu: (A) kelulusan kehadiran **per-individu** bagi setiap pegawai; (B) lencana nisbah **`X/Y`** pada lajur Status senarai permohonan Urusetia; (C) **Venue Calendar read-only** untuk peranan Officer/PA.
+
+### 11.1 Perbualan
+
+**User:** *What did we do so far?* → menyemak keadaan: kerja asas sesi sebelumnya siap, sesi ini menyambung dengan spesifikasi 3 ciri baharu (baca-sahaja dahulu, kemudian pelaksanaan).
+
+**User:** *Continue if you next steps* → meneruskan pelaksanaan + penghalusan + pengesahan sehingga lulus.
+
+**User:** *save and update our conversation in TestFormConverse.md* → transkrip sesi ini direkodkan dalam bahagian ini.
+
+**Nota laluan:** spesifikasi merujuk `...\PROJECT(S)\Code\TestForm`, tetapi laluan sebenar ialah `...\PROJECT(S)\KALORA\Code\TestForm`. Salinan **`...\KALORA\Code\KALORA`** (folder kerja semasa) kekal sebagai versi lama **belum diselaraskan** — semua edit dibuat dalam `TestForm` sahaja.
+
+### 11.2 Pelaksanaan
+
+**A. Kelulusan individu (per officer):**
+
+| Sasaran | Tindakan |
+|---|---|
+| `state.requests[].officers[]` | Setiap pegawai kini ada `status: 'pending' \| 'confirmed' \| 'rejected'`. |
+| `normalizeRequests()` (baharu, dipanggil dalam `load()`) | Migrasi data lama tanpa status → `pending` (selamat untuk `kalora_db_v2` sedia ada). |
+| `syncRequestStatus(req)` (baharu) | Status agregat permohonan = semua `confirmed` → disahkan; semua `rejected` → ditolak; selainnya → menunggu. Aktiviti berkaitan dipetakan ke `disahkan`/`ditolak`/`menunggu` (lompat `draf`). |
+| `submitRequest()` | Pegawai yang ditambah mula dengan `status: 'pending'`. |
+| `rReview()` (semula) | Setiap baris pegawai: lencana status + penanda **`ANDA`** untuk pegawai semasa; butang `Lulus`/`Tolak` **hanya** pada baris nama sendiri (idx); mesej kawasan tindakan untuk urusetia / bukan dalam senarai / sudah lulus / ditolak. |
+| `approveRequest(id, idx)` / `rejectRequest(id, idx)` (semula) | Guard peringkat fungsi: `role === 'pa'` **dan** `officers[idx].name === state.currentOfficer` (sekatan bukan sekadar UI). |
+| Kalendar selepas kelulusan | Entri padanan sedia ada dikemas kini ke **Confirmed** (bukan skip/duplikasi); entri baharu ditambah jika tiada. Tolak: **tiada** pemutusan kalendar (elak membuang entri benih sedia ada). Pemberitahuan agregat hanya bila kelulusan penuh. |
+| `go-review` | Simulasi persona: `state.currentOfficer` ditetapkan kepada pegawai pertama senarai permohonan sebelum role → `pa`, supaya alur serah → semakan terus boleh lulus. |
+
+**B. Lencana nisbah `X/Y` (Status):**
+
+| Sasaran | Tindakan |
+|---|---|
+| `approvalRatio(req)` (baharu) | Kira `confirmed / total`; kelas: semua lulus → `green`, separa → `amber`, tiada → `red`; sub-teks Melayu. |
+| `rRequests()` | Lajur Status = `<span class="badge ratio {cls}">X/Y</span>` + sub-teks; baris legenda `5/5` hijau / `2/5` amber / `0/5` merah. |
+| `style.css` | `.badge.ratio` (+ `.green/.amber/.red` pekat, putih atas warna, `tabular-nums`). |
+
+**C. Venue Calendar read-only (Officer/PA):**
+
+| Sasaran | Tindakan |
+|---|---|
+| `NAVS.pa` | Ditambah entri `{ id: 'venue-calendar', label: 'Venue Calendar' }`; logik nav aktif `renderChrome` mengendalikan `venueMode`. |
+| `rVenueCalendar()` | `ro = state.role === 'pa'` → lencana **READ-ONLY · RUJUKAN SAHAJA**, nota alternatif, `ro` dihantar ke 3 pemanggil `rowsBodyHtml()` + `venueDayPanel()`. |
+| `rowsBodyHtml(days, vFilter, ro)` | Sel kosong: `class="vslot free ro"` (kursor default, tiada hover/klik) — **tiada** `data-act="pick-slot"`. |
+| `venueDayPanel(date, vFilter, ro)` | Lajur **Urus disembunyikan** (colspan 5→4); slot kosong → `<span class="chip ro">` (bukan butang). |
+| Pengawal event | `pick-slot` + `edit-activity` disekat untuk `pa`; `add-venue`/`edit-venue`/`toggle-venue`/`delete-venue` disekat untuk bukan-`admin`. |
+
+**Penghalusan susulan (peranan PA lebih koheren):**
+
+- `rDashboard()` (pa): kira **kelulusan individu sendiri** (bukan agregat) → CTA `Kelulusan Individu (Bilangan: n)` + pautan ke permohonan menunggu diri + butang `Venue Calendar (Read-Only)`.
+- `rRequests()`: helper `myApprovalPending(r)` (fungsi ke-136); untuk `pa`, notis & butang Semak/Lihat berdasarkan **kelulusan sendiri** yang menunggu (Urusetia kekal agregat).
+- `scoreNotice()` kini mesej "menunggu kelulusan anda (nama)" untuk pa.
+
+**Benih diperkaya (demo terus boleh dilihat):** `act_3`/`req_3` (Seminar) kini **3 pegawai** — Hakim `pending`, Nur Aisyah `pending`, Fatin Nabilah `confirmed` → nisbah **1/3 amber** serta penggunaan kelulusan individu antara beberapa pegawai.
+
+### 11.3 Pengesahan (Sesi 7)
+
+- `node --check script.js` → **OK**.
+- `smoke-ocal.js` → **123/123 lulus** (91 lama + 32 baharu), termasuk seksyen 13:
+  - Nisbah benih: `1/1` hijau, `1/3` amber, `0/1` merah + legenda.
+  - `Muhammad Hakim` buka `req_3`: tepat **satu** butang Lulus/Tolak (nama sendiri), baris lain tiada butang, penanda `ANDA`.
+  - Lulus idx 0 → nisbah `2/3`, mesej kelulusan, butang hilang; `req_4` kekal `0/1` (tidak terjejas).
+  - Kalendar peribadi Hakim: entri Seminar → `cal-entry confirmed` selepas kelulusan sendiri.
+  - Venue Calendar pa: `READ-ONLY`, tiada `pick-slot`, tiada butang `Urus`, `<span class="chip ro">`, grid `vslot free ro` (mingguan), `pick-slot`/`delete-venue` disekat tanpa exception.
+  - Integriti sumber: **136 fungsi**, 0 duplikat.
+
+### 11.4 Keputusan reka bentuk
+- Model status pada **pegawai** (`officers[].status`), agregat (`r.status`) **diturunkan** — bukan disimpan dua kali.
+- Kelulusan dikunci dua lapis: UI (butang hanya baris sendiri) + fungsi (guard `role` + nama).
+- Kalendar dikemas kini **hanya** oleh kelulusan sendiri; penolakan tidak menyentuh kalendar (entri benih kekal).
+- Read-only dicapai dengan parameter `ro` pada fungsi sedia ada (bukan salinan fungsi) — elak pendua logik.
+- `X/Y` = `confirmed / total`; keputusan asal "tiada amber untuk benih" ditukar selepas benih diperkaya kepada 3 pegawai (kini `1/3` amber wujud dan diuji).
 
 
