@@ -96,7 +96,8 @@
     pa: [
       { id: 'dashboard', label: 'Dashboard' },
       { id: 'requests', label: 'Attendance Requests' },
-      { id: 'calendar', label: 'Calendar' }
+      { id: 'calendar', label: 'Calendar' },
+      { id: 'venue-calendar', label: 'Venue Calendar' }
     ],
     admin: [
       { id: 'dashboard', label: 'Dashboard' },
@@ -229,6 +230,53 @@
     if (status === 'confirmed') return { label: 'Disahkan', cls: 'green', sub: 'CONFIRMED' };
     if (status === 'rejected') return { label: 'Ditolak', cls: 'red', sub: 'REJECTED' };
     return { label: status, cls: 'gray' };
+  }
+
+  /* Nisbah kelulusan KEHADIRAN INDIVIDU: berapa pegawai telah Lulus / jumlah jemputan.
+     Hijau = semua lulus, Amber = separa, Merah = tiada kelulusan. */
+  function approvalRatio(req) {
+    var officers = (req && req.officers) || [];
+    var total = officers.length;
+    var confirmed = officers.filter(function (o) { return o.status === 'confirmed'; }).length;
+    var cls = (total > 0 && confirmed === total) ? 'green' : (confirmed === 0 ? 'red' : 'amber');
+    var sub = (total > 0 && confirmed === total) ? 'Semua pegawai lulus'
+      : (confirmed === 0 ? 'Tiada kelulusan' : 'Sebahagian lulus');
+    return { total: total, confirmed: confirmed, cls: cls, text: confirmed + '/' + total, sub: sub };
+  }
+
+  /* Kemas kini status agregat permohonan & aktiviti berdasarkan status individu pegawai. */
+  function syncRequestStatus(req) {
+    var officers = req.officers || [];
+    var total = officers.length;
+    var confirmed = officers.filter(function (o) { return o.status === 'confirmed'; }).length;
+    var rejected = officers.filter(function (o) { return o.status === 'rejected'; }).length;
+    var st = 'pending';
+    if (total > 0 && confirmed === total) st = 'confirmed';
+    else if (total > 0 && rejected === total) st = 'rejected';
+    req.status = st;
+
+    var act = getActivity(req.activityId);
+    if (act && act.status !== 'draf') {
+      if (st === 'confirmed') act.status = 'disahkan';
+      else if (st === 'rejected') act.status = 'ditolak';
+      else act.status = 'menunggu';
+    }
+    return st;
+  }
+
+  /* Normalisasi data lama: setiap pegawai wujud dalam permohonan mesti mempunyai
+     status kelulusan INDIVIDU sendiri ('pending' | 'confirmed' | 'rejected'). */
+  function normalizeRequests() {
+    (state.requests || []).forEach(function (r) {
+      if (!Array.isArray(r.officers)) r.officers = [];
+      r.officers.forEach(function (o) {
+        if (o.status !== 'confirmed' && o.status !== 'rejected') {
+          o.status = r.status === 'confirmed' ? 'confirmed'
+            : (r.status === 'rejected' ? 'rejected' : 'pending');
+        }
+      });
+      syncRequestStatus(r);
+    });
   }
 
   function calStatusBadge(st) {
@@ -646,7 +694,11 @@ function seedData() {
       tarikh: '2026-09-22', masaMula: '10:00', masaTamat: '12:00',
       lokasi: 'Dewan Canselor UMS', venueId: 'ven_1', jafpib: 'BPI', keutamaan: 'Tinggi',
       penerangan: 'Seminar dalaman untuk kakitangan.',
-      status: 'menunggu', officers: [{ name: 'Muhammad Hakim', peranan: 'Panel', kehadiran: 'Wajib' }], checked: true
+      status: 'menunggu', officers: [
+        { name: 'Muhammad Hakim', peranan: 'Panel', kehadiran: 'Wajib' },
+        { name: 'Nur Aisyah', peranan: 'Penyampai Ucapan', kehadiran: 'Wajib' },
+        { name: 'Fatin Nabilah', peranan: 'Hadir Jika Berkelapangan', kehadiran: 'Pilihan' }
+      ], checked: true
     };
 
     /* Demo tempahan venue pada minggu semasa (untuk Kalendar Venue & semakan pertindihan). */
@@ -680,7 +732,7 @@ function seedData() {
         nama: 'Mesyuarat Pengurusan UMS', kategori: 'Mesyuarat',
         tarikh: '2026-09-20', masaMula: '09:00', masaTamat: '11:00',
         lokasi: 'Bilik Mesyuarat Utama (JAFPIB)', venueId: 'ven_2', keutamaan: 'Tinggi',
-        officers: [{ name: 'Ahmad bin Ali', peranan: 'Perasmi', kehadiran: 'Wajib' }],
+        officers: [{ name: 'Ahmad bin Ali', peranan: 'Perasmi', kehadiran: 'Wajib', status: 'confirmed' }],
         status: 'confirmed', submittedAt: '18 Sep 2026, 10:15'
       },
       {
@@ -688,7 +740,7 @@ function seedData() {
         nama: 'Program Universiti', kategori: 'Program / Acara',
         tarikh: '2026-09-21', masaMula: '14:00', masaTamat: '16:00',
         lokasi: 'Dewan Kuliah Pusat 1 (DKP 1)', venueId: 'ven_3', keutamaan: 'Sederhana',
-        officers: [{ name: 'Siti Aminah', peranan: 'Panel', kehadiran: 'Wajib' }],
+        officers: [{ name: 'Siti Aminah', peranan: 'Panel', kehadiran: 'Wajib', status: 'confirmed' }],
         status: 'confirmed', submittedAt: '18 Sep 2026, 11:00'
       },
       {
@@ -696,7 +748,11 @@ function seedData() {
         nama: 'Seminar Pemantapan Pengurusan', kategori: CATEGORIES[4],
         tarikh: '2026-09-22', masaMula: '10:00', masaTamat: '12:00',
         lokasi: 'Dewan Canselor UMS', venueId: 'ven_1', keutamaan: 'Tinggi',
-        officers: [{ name: 'Muhammad Hakim', peranan: 'Panel', kehadiran: 'Wajib' }],
+        officers: [
+          { name: 'Muhammad Hakim', peranan: 'Panel', kehadiran: 'Wajib', status: 'pending' },
+          { name: 'Nur Aisyah', peranan: 'Penyampai Ucapan', kehadiran: 'Wajib', status: 'pending' },
+          { name: 'Fatin Nabilah', peranan: 'Hadir Jika Berkelapangan', kehadiran: 'Pilihan', status: 'confirmed' }
+        ],
         status: 'pending', submittedAt: '20 Sep 2026, 09:05'
       },
       {
@@ -704,7 +760,7 @@ function seedData() {
         nama: 'Taklimat Latihan Staf Jabatan', kategori: 'Ceramah / Taklimat',
         tarikh: addDays(todayISO(), 2), masaMula: '14:00', masaTamat: '16:00',
         lokasi: 'Bilik Mesyuarat Utama (JAFPIB)', venueId: 'ven_2', keutamaan: 'Sederhana',
-        officers: [{ name: 'Abdul Rahman', peranan: 'Panel', kehadiran: 'Wajib' }],
+        officers: [{ name: 'Abdul Rahman', peranan: 'Panel', kehadiran: 'Wajib', status: 'pending' }],
         status: 'pending', submittedAt: new Date().toLocaleString('ms-MY')
       }
     ];
@@ -759,6 +815,7 @@ function seedData() {
     }
     state.venues = normalizeVenues(state.venues);
     linkVenues();
+    normalizeRequests();
     state.settings = Object.assign(
       { systemName: 'KALORA', footerNote: 'Prototaip frontend sahaja. Tiada backend / pangkalan data.', demoActive: true },
       state.settings || {}
@@ -810,8 +867,13 @@ function seedData() {
     var allowed = NAVS[state.role].map(function (n) { return n.id; });
 
     // Sidebar nav
+    var venueMode = state.view === 'calendar' && viewParams.calMode === 'venue';
+    var hasVenueNav = NAVS[state.role].some(function (n) { return n.id === 'venue-calendar'; });
     var navHtml = NAVS[state.role].map(function (n) {
-      var active = state.view === n.id ? ' active' : '';
+      var active;
+      if (n.id === 'venue-calendar') active = venueMode ? ' active' : '';
+      else if (n.id === 'calendar') active = (state.view === 'calendar' && !(venueMode && hasVenueNav)) ? ' active' : '';
+      else active = state.view === n.id ? ' active' : '';
       return '<a href="#" data-nav="' + n.id + '" class="' + active + '">' + esc(n.label) + '</a>';
     }).join('');
     $('nav').innerHTML = navHtml;
@@ -928,15 +990,18 @@ function seedData() {
         '<a href="#" data-nav="requests" class="btn btn-outline">Semak Permohonan</a>' +
         '<a href="#" data-nav="calendar" class="btn btn-outline">Calendar</a></div>';
     } else if (state.role === 'pa') {
-      roleCta = '<div class="btn-row"><a href="#" data-nav="requests" class="btn">Semak Permohonan (Bilangan: ' + s.pending + ')</a>' +
-        '<a href="#" data-nav="calendar" class="btn btn-outline">Calendar</a></div>';
-      if (s.pending > 0) {
-        var pr = null;
-        for (var i = 0; i < state.requests.length; i++) {
-          if (state.requests[i].status === 'pending') { pr = state.requests[i]; break; }
-        }
-        if (pr) roleCta += '<div class="msg info" style="margin-top:14px"><div class="ico">&#8505;</div><div><strong>Permohonan perlu semakan</strong>' + esc(pr.nama) + ' &mdash; ' +
-          '<a href="#" data-act="open-review" data-args=\'{"id":"' + pr.id + '"}\'>[ Pergi ke Semakan ]</a></div></div>';
+      /* Bagi pegawai/PA: kira permohonan yang menunggu KELULUSAN INDIVIDU dirinya sahaja. */
+      var meName = state.currentOfficer || '';
+      var myWaiting = state.requests.filter(function (r) {
+        return (r.officers || []).some(function (o) { return o.name === meName && o.status === 'pending'; });
+      });
+      roleCta = '<div class="btn-row"><a href="#" data-nav="requests" class="btn">Kelulusan Individu (Bilangan: ' + myWaiting.length + ')</a>' +
+        '<a href="#" data-nav="calendar" class="btn btn-outline">Calendar</a>' +
+        '<a href="#" data-nav="venue-calendar" class="btn btn-outline">Venue Calendar (Read-Only)</a></div>';
+      if (myWaiting.length > 0) {
+        roleCta += '<div class="msg info" style="margin-top:14px"><div class="ico">&#8505;</div><div><strong>Menunggu kelulusan anda (' + esc(meName) + ')</strong>' + esc(myWaiting[0].nama) + ' &mdash; ' +
+          '<a href="#" data-act="open-review" data-args=\'{"id":"' + myWaiting[0].id + '"}\'>[ Pergi ke Semakan ]</a>' +
+          '<br><span style="font-size:13px">Lulus / Tolak hanya untuk nama anda sendiri; pegawai lain meluluskan kelulusan mereka secara berasingan.</span></div></div>';
       }
     } else {
       roleCta = '<div class="btn-row"><a href="#" data-nav="audit" class="btn">Lihat Audit Log</a>' +
@@ -1410,7 +1475,9 @@ function seedData() {
       nama: a.nama, kategori: a.kategori,
       tarikh: a.tarikh, masaMula: a.masaMula, masaTamat: a.masaTamat,
       lokasi: a.lokasi, venueId: a.venueId || (venue ? venue.id : ''), keutamaan: a.keutamaan,
-      officers: (a.officers || []).map(function (o) { return { name: o.name, peranan: o.peranan, kehadiran: o.kehadiran }; }),
+      officers: (a.officers || []).map(function (o) {
+        return { name: o.name, peranan: o.peranan, kehadiran: o.kehadiran, status: 'pending' };
+      }),
       status: 'pending',
       submittedAt: new Date().toLocaleString('ms-MY')
     };
@@ -1439,7 +1506,9 @@ function seedData() {
       '</div></div>' +
       '<div class="card">' +
       '<div class="msg info"><div class="ico">&#8505;</div><div><strong>Ingat: AVAILABLE &#8800; CONFIRMED</strong>' +
-      'Walaupun pegawai tersedia dan tiada konflik, permohonan ini masih perlu diluluskan oleh PA/NC sebelum dianggap disahkan.</div></div>' +
+      'Walaupun pegawai tersedia dan tiada konflik, setiap pegawai yang dijemput masih perlu ' +
+      '<b>meluluskan kehadiran mereka secara individu</b> (untuk nama mereka sendiri) sebelum ' +
+      'kehadiran dianggap disahkan dalam kalendar peribadi masing-masing.</div></div>' +
       '<div class="btn-row">' +
       '  <button class="btn" data-act="go-review" data-args=\'{"id":"' + req.id + '"}\'>Pergi ke Semakan PA/NC</button>' +
       '  <a href="#" class="btn btn-outline" data-nav="requests">Senarai Permohonan</a>' +
@@ -1449,36 +1518,60 @@ function seedData() {
   /* ---------------- PERMOHONAN / SEMAKAN ---------------- */
 
   function rRequests() {
+    var isPa = state.role === 'pa';
+    var me = state.currentOfficer || '';
+
+    /* Permohonan yang menunggu kelulusan INDIVIDU pegawai semasa (mod PA). */
+    function myApprovalPending(r) {
+      if (!isPa) return false;
+      return (r.officers || []).some(function (o) { return o.name === me && o.status === 'pending'; });
+    }
+
     var rows = state.requests.map(function (r) {
-      var st = scoreRequestStatus(r.status);
-      var semak = state.role === 'pa' && r.status === 'pending'
-        ? '<button class="btn btn-sm" data-act="open-review" data-args=\'{"id":"' + r.id + '"}\'>Semak</button>'
-        : (state.role === 'pa' ? '<button class="btn btn-sm btn-outline" data-act="open-review" data-args=\'{"id":"' + r.id + '"}\'>Lihat</button>' : '');
+      var ratio = approvalRatio(r);
+      var semak = '';
+      if (isPa) {
+        semak = myApprovalPending(r)
+          ? '<button class="btn btn-sm" data-act="open-review" data-args=\'{"id":"' + r.id + '"}\'>Semak</button>'
+          : '<button class="btn btn-sm btn-outline" data-act="open-review" data-args=\'{"id":"' + r.id + '"}\'>Lihat</button>';
+      }
       return '<tr>' +
         '<td><strong>' + esc(r.nama) + '</strong></td>' +
         '<td>' + esc(fmtDate(r.tarikh)) + '<div style="font-size:12.5px;color:var(--muted)">' + esc(fmtTime(r.masaMula)) + ' &ndash; ' + esc(fmtTime(r.masaTamat)) + '</div></td>' +
         '<td>' + esc(venueLabel(r)) + '</td>' +
         '<td>' + esc(r.officers.map(function (o) { return o.name; }).join(', ')) + '</td>' +
         '<td>' + esc(r.officers.map(function (o) { return o.peranan; }).join(', ')) + '</td>' +
-        '<td><span class="badge ' + st.cls + '">' + st.label + '</span><div style="font-size:11px;color:var(--muted);letter-spacing:.5px">' + st.sub + '</div></td>' +
+        '<td><span class="badge ratio ' + ratio.cls + '">' + ratio.text + '</span>' +
+        '<div style="font-size:11px;color:var(--muted);letter-spacing:.5px">' + esc(ratio.sub) + '</div></td>' +
         '<td>' + semak + '</td>' +
         '</tr>';
     }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Tiada permohonan.</td></tr>';
 
-    var pending = scoreNotice(state.requests.filter(function (r) { return r.status === 'pending'; }).length);
+    var pending = scoreNotice(
+      isPa
+        ? state.requests.filter(myApprovalPending).length
+        : state.requests.filter(function (r) { return r.status === 'pending'; }).length
+    );
 
     return '<div class="card">' +
       '<h2>Permohonan Kehadiran</h2>' +
       (pending ? '<div class="msg info"><div class="ico">&#8505;</div><div>' + pending + '</div></div>' : '') +
       '<div class="table-wrap" style="margin-top:12px"><table>' +
       '<thead><tr><th>Aktiviti</th><th>Tarikh / Masa</th><th>Venue</th><th>Pegawai</th><th>Peranan</th><th>Status</th><th>Tindakan</th></tr></thead>' +
-      '<tbody>' + rows + '</tbody></table></div></div>';
+      '<tbody>' + rows + '</tbody></table></div>' +
+      '<div style="margin-top:10px;font-size:12.5px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center">' +
+      '<span>Kelulusan individu:</span>' +
+      '<span class="badge ratio green">5/5</span><span>semua pegawai lulus</span>' +
+      '<span class="badge ratio amber">2/5</span><span>sebahagian lulus</span>' +
+      '<span class="badge ratio red">0/5</span><span>tiada kelulusan</span>' +
+      '</div></div>';
 
     function scoreNotice(n) {
       if (n === 0) return null;
-      if (state.role === 'pa' && n > 0) {
-        var pr = state.requests.filter(function (r) { return r.status === 'pending'; })[0];
-        return '<strong>' + n + ' permohonan menunggu semakan.</strong> ' +
+      if (isPa) {
+        var pr = state.requests.filter(myApprovalPending)[0];
+        return '<strong>' + n + ' permohonan menunggu kelulusan anda (' + esc(me) + ').</strong> ' +
+          'Kelulusan adalah PER INDIVIDU &mdash; pegawai lain perlu meluluskan secara berasingan. ' +
           '<a href="#" data-act="open-review" data-args=\'{"id":"' + pr.id + '"}\'>[ Pergi ke Semakan ]</a>';
       }
       return '<strong>' + n + ' permohonan menunggu semakan PA/NC.</strong>';
@@ -1489,32 +1582,77 @@ function seedData() {
     var req = getRequest(viewParams.id);
     if (!req) return '<div class="empty-state">Permohonan tidak dijumpai.</div>';
     var st = scoreRequestStatus(req.status);
+    var ratio = approvalRatio(req);
+    var isPa = state.role === 'pa';
+    var current = state.currentOfficer || '';
 
-    var officerLines = req.officers.map(function (o) {
-      return '<tr><td>' + esc(o.name) + '</td><td>' + esc(o.peranan) + '</td>' +
-        '<td><span class="badge ' + (o.kehadiran === 'Wajib' ? 'blue' : 'gray') + '">' + esc(o.kehadiran) + '</span></td></tr>';
-    }).join('');
+    var myIdx = -1;
+    (req.officers || []).forEach(function (o, i) { if (o.name === current) myIdx = i; });
 
+    var officerLines = (req.officers || []).map(function (o, i) {
+      var mine = isPa && i === myIdx;
+      var statusBadge = o.status === 'confirmed'
+        ? '<span class="badge green">&#10003; Lulus</span>'
+        : (o.status === 'rejected'
+          ? '<span class="badge red">&#10005; Tolak</span>'
+          : '<span class="badge amber">Menunggu</span>');
+      var tindakan = '';
+      if (mine && o.status === 'pending') {
+        tindakan = '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button class="btn btn-sm btn-success" data-act="approve" data-args=\'{"id":"' + req.id + '","idx":' + i + '}\'>&#10003; Lulus</button>' +
+          '<button class="btn btn-sm btn-danger-outline" data-act="reject" data-args=\'{"id":"' + req.id + '","idx":' + i + '}\'>&#10005; Tolak</button>' +
+          '</div>';
+      } else if (mine) {
+        tindakan = '<span class="sub">Kelulusan anda telah direkodkan.</span>';
+      } else {
+        tindakan = '<span class="sub">' + (o.status === 'pending'
+          ? 'Menunggu kelulusan pegawai ini'
+          : (o.status === 'confirmed' ? 'Pegawai ini telah meluluskan' : 'Pegawai ini menolak')) + '</span>';
+      }
+      return '<tr' + (mine ? ' style="background:var(--blue-50)"' : '') + '>' +
+        '<td><strong>' + esc(o.name) + '</strong>' + (mine ? ' <span class="badge blue">ANDA</span>' : '') + '</td>' +
+        '<td>' + esc(o.peranan) + '</td>' +
+        '<td><span class="badge ' + (o.kehadiran === 'Wajib' ? 'blue' : 'gray') + '">' + esc(o.kehadiran) + '</span></td>' +
+        '<td>' + statusBadge + '</td>' +
+        '<td>' + tindakan + '</td></tr>';
+    }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted)">Tiada pegawai dijemput.</td></tr>';
+
+    /* Arahan tindakan mengikut status KEHADIRAN INDIVIDU pegawai semasa. */
+    var my = myIdx >= 0 ? req.officers[myIdx] : null;
     var actionArea = '';
-    if (req.status === 'pending') {
-      actionArea = '<div class="btn-row">' +
-        '<button class="btn btn-success" data-act="approve" data-args=\'{"id":"' + req.id + '"}\'>&#10003; Lulus</button>' +
-        '<button class="btn btn-danger" data-act="reject" data-args=\'{"id":"' + req.id + '"}\'>&#10005; Tolak</button>' +
-        '</div>';
-    } else if (req.status === 'confirmed') {
-      actionArea = '<div class="msg success"><div class="ico">&#9989;</div><div><strong>Permohonan diluluskan.</strong>' +
-        'Status dikemas kini kepada <b>CONFIRMED</b>. Kalendar pegawai telah dikemas kini.</div></div>' +
+    if (!isPa) {
+      actionArea = '<div class="msg info"><div class="ico">&#8505;</div><div>' +
+        '<strong>Paparan semakan (Urusetia).</strong> Kelulusan kehadiran dilakukan secara ' +
+        '<b>individu</b> oleh setiap pegawai / PA untuk nama mereka sendiri sahaja.</div></div>';
+    } else if (!my) {
+      actionArea = '<div class="msg info"><div class="ico">&#8505;</div><div>' +
+        '<strong>Anda (' + esc(current || '-') + ') tiada dalam senarai pegawai permohonan ini.</strong> ' +
+        'Tiada kelulusan individu diperlukan daripada anda.</div></div>';
+    } else if (my.status === 'confirmed') {
+      actionArea = '<div class="msg success"><div class="ico">&#9989;</div><div>' +
+        '<strong>Kelulusan anda telah direkodkan (CONFIRMED).</strong>' +
+        'Hanya status kehadiran <b>' + esc(my.name) + '</b> yang diubah &mdash; status pegawai lain tidak terjejas. ' +
+        'Kalendar peribadi anda dikemas kini sebagai <b>Confirmed</b>.</div></div>' +
         '<div class="btn-row"><button class="btn" data-act="go-calendar">Lihat Kalendar Pegawai</button></div>';
+    } else if (my.status === 'rejected') {
+      actionArea = '<div class="msg error"><div class="ico">&#10062;</div><div>' +
+        '<strong>Anda telah menolak kehadiran ini.</strong>' +
+        'Hanya status kehadiran <b>' + esc(my.name) + '</b> sahaja direkodkan sebagai ditolak. ' +
+        'Aktiviti ini tidak masuk ke kalendar peribadi anda.</div></div>' +
+        '<div class="btn-row"><a href="#" class="btn btn-outline" data-nav="requests">Kembali ke Senarai Permohonan</a></div>';
     } else {
-      actionArea = '<div class="msg error"><div class="ico">&#10062;</div><div><strong>Permohonan telah ditolak.</strong>' +
-        'Anda boleh kembali ke halaman aktiviti.</div></div>' +
-        '<div class="btn-row"><a href="#" class="btn" data-nav="activities">Kembali ke Aktiviti</a></div>';
+      actionArea = '<div class="msg warn"><div class="ico">&#9888;&#65039;</div><div>' +
+        '<strong>Tindakan anda diperlukan &mdash; Lulus / Tolak untuk nama anda sendiri.</strong>' +
+        'Tekan butang dalam baris <b>' + esc(my.name) + '</b> di atas. Keputusan anda hanya menukar status peribadi anda; ' +
+        'status pegawai lain kekal tidak terjejas.</div></div>';
     }
 
     return '<div class="card detail-box">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
       '<h2 style="margin:0">Permohonan Kehadiran</h2>' +
-      '<span class="badge ' + st.cls + '">' + st.label + ' &middot; ' + st.sub + '</span></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+      '<span class="badge ratio ' + ratio.cls + '" title="Nisbah kelulusan individu">' + ratio.text + '</span>' +
+      '<span class="badge ' + st.cls + '">' + st.label + ' &middot; ' + st.sub + '</span></div></div>' +
       '<div class="info-grid" style="margin-top:14px">' +
       '  <div class="k">Aktiviti:</div><div class="v"><strong>' + esc(req.nama) + '</strong></div>' +
       '  <div class="k">Tarikh:</div><div class="v">' + esc(fmtDateLong(req.tarikh)) + '</div>' +
@@ -1523,49 +1661,92 @@ function seedData() {
       '  <div class="k">Status Venue:</div><div class="v">' + (req.venueId && getVenue(req.venueId) ? venueStatusBadge(getVenue(req.venueId)) : '<span class="badge gray">-</span>') + '</div>' +
       '  <div class="k">Keutamaan:</div><div class="v">' + esc(req.keutamaan) + '</div>' +
       '  <div class="k">Dihantar:</div><div class="v">' + esc(req.submittedAt || '-') + '</div>' +
+      '  <div class="k">Nisbah Kelulusan:</div><div class="v"><span class="badge ratio ' + ratio.cls + '">' + ratio.text + '</span> ' +
+      '<span style="font-size:13px;color:var(--muted)">' + esc(ratio.sub) + '</span></div>' +
       '</div></div>' +
 
       '<div class="card">' +
-      '<h3>Pegawai &amp; Peranan</h3>' +
+      '<h3>Pegawai &amp; Peranan <span style="font-size:13px;font-weight:400;color:var(--muted)">&mdash; Kelulusan Individu</span></h3>' +
       '<div class="table-wrap"><table>' +
-      '<thead><tr><th>Pegawai</th><th>Peranan</th><th>Kehadiran</th></tr></thead>' +
+      '<thead><tr><th>Pegawai</th><th>Peranan</th><th>Kehadiran</th><th>Status Kelulusan</th><th>Tindakan</th></tr></thead>' +
       '<tbody>' + officerLines + '</tbody></table></div>' +
       actionArea +
       '</div>';
   }
 
-  function approveRequest(id) {
+  /* Kelulusan KEHADIRAN INDIVIDU — hanya menukar status pegawai yang bertindak
+     (idx). Status pegawai lain dalam permohonan yang sama tidak terjejas. */
+  function approveRequest(id, idx) {
     var req = getRequest(id);
-    if (!req || req.status !== 'pending') return;
-    req.status = 'confirmed';
-    var act = getActivity(req.activityId);
-    if (act) act.status = 'disahkan';
+    if (!req) return;
+    var o = (req.officers || [])[idx];
+    if (!o) return;
+    if (state.role !== 'pa' || o.name !== (state.currentOfficer || '')) {
+      toast('Kelulusan hanya boleh dilakukan oleh pegawai berkenaan untuk nama sendiri.', 'red');
+      return;
+    }
+    if (o.status !== 'pending') {
+      toast('Kelulusan individu untuk ' + o.name + ' telah direkodkan sebelum ini.', 'amber');
+      return;
+    }
 
-    req.officers.forEach(function (o) {
+    o.status = 'confirmed';
+
+    /* Kalendar peribadi pegawai: hanya menjadi Confirmed SETELAH pegawai itu
+       sendiri meluluskan kehadirannya. Entri sedia ada dikemas kini, baharu ditambah. */
+    var match = null;
+    state.calendar.forEach(function (c) {
+      if (match) return;
+      if (c.officer === o.name && c.date === req.tarikh &&
+        c.start === req.masaMula && c.end === req.masaTamat && c.title === req.nama) match = c;
+    });
+    if (match) {
+      match.status = 'Confirmed';
+      match.role = o.peranan;
+    } else {
       state.calendar.push({
         id: uid('c_'), date: req.tarikh, start: req.masaMula, end: req.masaTamat,
         title: req.nama, officer: o.name, role: o.peranan, status: 'Confirmed',
         venue: req.lokasi, venueId: req.venueId || ''
       });
-    });
+    }
 
+    var agg = syncRequestStatus(req);
     save();
-    audit('Permohonan diluluskan (PA/NC): ' + req.nama);
-    notify('Permohonan kehadiran anda untuk "' + req.nama + '" telah diluluskan.');
-    toast('Permohonan diluluskan.');
+    audit('Kelulusan kehadiran INDIVIDU (' + o.name + '): ' + req.nama + ' — nisbah ' +
+      approvalRatio(req).text);
+    if (agg === 'confirmed') {
+      notify('Semua pegawai telah mengesahkan kehadiran "' + req.nama + '". Permohonan kini disahkan.');
+    }
+    toast('Kelulusan direkodkan untuk ' + o.name + '.');
     show('review', { id: id });
   }
 
-  function rejectRequest(id) {
+  /* Penolakan KEHADIRAN INDIVIDU — status pegawai lain tidak terjejas. */
+  function rejectRequest(id, idx) {
     var req = getRequest(id);
-    if (!req || req.status !== 'pending') return;
-    req.status = 'rejected';
-    var act = getActivity(req.activityId);
-    if (act) act.status = 'ditolak';
+    if (!req) return;
+    var o = (req.officers || [])[idx];
+    if (!o) return;
+    if (state.role !== 'pa' || o.name !== (state.currentOfficer || '')) {
+      toast('Penolakan hanya boleh dilakukan oleh pegawai berkenaan untuk nama sendiri.', 'red');
+      return;
+    }
+    if (o.status !== 'pending') {
+      toast('Keputusan individu untuk ' + o.name + ' telah direkodkan sebelum ini.', 'amber');
+      return;
+    }
+
+    o.status = 'rejected';
+
+    var agg = syncRequestStatus(req);
     save();
-    audit('Permohonan ditolak (PA/NC): ' + req.nama);
-    notify('Permohonan kehadiran anda untuk "' + req.nama + '" telah ditolak.');
-    toast('Permohonan telah ditolak.', 'red');
+    audit('Penolakan kehadiran INDIVIDU (' + o.name + '): ' + req.nama + ' — nisbah ' +
+      approvalRatio(req).text);
+    if (agg === 'rejected') {
+      notify('Semua pegawai telah menolak kehadiran "' + req.nama + '". Permohonan kini ditolak.');
+    }
+    toast('Kehadiran individu ' + o.name + ' ditolak.', 'red');
     show('review', { id: id });
   }
 
@@ -2008,6 +2189,8 @@ function seedData() {
     var vFilter = viewParams.venue || 'semua';
     var date = viewParams.date || todayISO();
     var venue = vFilter === 'semua' ? null : getVenue(vFilter);
+    /* Halaman Officer/PA: Venue Calendar dalam mod READ-ONLY (rujukan sahaja). */
+    var ro = state.role === 'pa';
 
     venueCalCtx = { venue: vFilter, mode: mode, date: date };
 
@@ -2044,12 +2227,18 @@ function seedData() {
       '</div>';
 
     var head = '<div class="card">' +
-      '<div class="card-head"><h3 style="margin:0">Venue Schedule</h3>' + tools + '</div>' +
+      '<div class="card-head"><h3 style="margin:0">Venue Schedule</h3>' +
+      (ro ? '<span class="badge blue">READ-ONLY &middot; RUJUKAN SAHAJA</span>' : '') + tools + '</div>' +
       '<div class="msg info" style="margin-top:12px"><div class="ico">&#8505;</div><div>' +
-      (venue ? 'Jadual tempahan <b>' + esc(venue.nama) + '</b> &middot; ' : 'Jadual tempahan semua venue &middot; ') +
-      'Slot kosong <b>klik untuk terus mendaftarkan aktiviti</b>. ' +
-      'Tempahan berstatus <span class="badge amber">Menunggu Semakan</span> (Pending) dan ' +
-      '<span class="badge green">Disahkan</span> (Confirmed) menghalang slot baharu yang bertindih.</div></div>' +
+      (ro
+        ? '<b>Mod rujukan (read-only).</b> Paparan ini hanya untuk menyemak ketersediaan dewan / bilik. ' +
+          'Klik pada slot, penempahan dan pengubahsuaian data venue <b>tidak dibenarkan</b> &mdash; ' +
+          'hubungi Urusetia untuk mendaftarkan aktiviti rasmi.'
+        : (venue ? 'Jadual tempahan <b>' + esc(venue.nama) + '</b> &middot; ' : 'Jadual tempahan semua venue &middot; ') +
+          'Slot kosong <b>klik untuk terus mendaftarkan aktiviti</b>. ' +
+          'Tempahan berstatus <span class="badge amber">Menunggu Semakan</span> (Pending) dan ' +
+          '<span class="badge green">Disahkan</span> (Confirmed) menghalang slot baharu yang bertindih.') +
+      '</div></div>' +
       '</div>';
 
     var body;
@@ -2059,16 +2248,16 @@ function seedData() {
         'Venue ini tidak boleh ditempah sehingga Admin mengemas kini statusnya kepada <b>Aktif</b>.</div></div>' +
         '<div class="table-wrap"><table class="vgrid"><thead><tr><th class="vtime">Masa</th>' +
         daysHeadHtml(weekDays(date), vFilter) + '</tr></thead><tbody>' +
-        rowsBodyHtml(weekDays(date), vFilter) + '</tbody></table></div></div>';
+        rowsBodyHtml(weekDays(date), vFilter, ro) + '</tbody></table></div></div>';
     } else if (mode === 'mingguan') {
       var days = weekDays(date);
       body = '<div class="card"><h3>Jadual Mingguan &middot; ' +
         esc(fmtDate(days[0])) + ' &ndash; ' + esc(fmtDate(days[6])) + '</h3>' +
         '<div class="table-wrap"><table class="vgrid">' +
         '<thead><tr><th class="vtime">Masa</th>' + daysHeadHtml(days, vFilter) + '</tr></thead>' +
-        '<tbody>' + rowsBodyHtml(days, vFilter) + '</tbody></table></div></div>';
+        '<tbody>' + rowsBodyHtml(days, vFilter, ro) + '</tbody></table></div></div>';
     } else {
-      body = venueDayPanel(date, vFilter);
+      body = venueDayPanel(date, vFilter, ro);
     }
 
     return head +
@@ -2089,7 +2278,7 @@ function seedData() {
     }).join('');
   }
 
-  function rowsBodyHtml(days, vFilter) {
+  function rowsBodyHtml(days, vFilter, ro) {
     var bookings = venueBookings({});
     var html = '';
     for (var h = VENUE_HOURS.start; h < VENUE_HOURS.end; h++) {
@@ -2113,6 +2302,9 @@ function seedData() {
         });
         if (items.length) {
           html += '<td class="vslot busy">' + items.join('') + '</td>';
+        } else if (ro) {
+          /* Mod read-only (officer): slot kosong tanpa tindakan tempahan. */
+          html += '<td class="vslot free ro" title="Slot kosong (rujukan sahaja - tiada tempahan)"></td>';
         } else {
           html += '<td class="vslot free" title="Slot kosong - klik untuk daftar aktiviti" data-act="pick-slot" data-args=\'' +
             '{"date":"' + d + '","start":"' + fromMin(slotStart) + '","venue":"' + (vFilter === 'semua' ? '' : vFilter) + '"}\'></td>';
@@ -2123,7 +2315,7 @@ function seedData() {
     return html;
   }
 
-  function venueDayPanel(date, vFilter) {
+  function venueDayPanel(date, vFilter, ro) {
     var bookings = venueBookings({ date: date }).filter(function (a) {
       return vFilter === 'semua' || sameVenueId(a, vFilter);
     });
@@ -2134,9 +2326,9 @@ function seedData() {
         '<td><strong>' + esc(a.nama) + '</strong><div class="sub">' + esc(a.kategori) + ' &middot; ' + esc(a.jafpib || '-') + '</div></td>' +
         '<td>' + esc(venueLabel(a)) + '</td>' +
         '<td>' + activityStatusBadge(a) + '</td>' +
-        '<td class="nowrap"><button class="btn btn-sm btn-outline" data-act="edit-activity" data-args=\'{"id":"' + esc(a.id) + '"}\'>Urus</button></td>' +
+        (ro ? '' : '<td class="nowrap"><button class="btn btn-sm btn-outline" data-act="edit-activity" data-args=\'{"id":"' + esc(a.id) + '"}\'>Urus</button></td>') +
         '</tr>';
-    }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted)">Tiada tempahan pada ' +
+    }).join('') || '<tr><td colspan="' + (ro ? 4 : 5) + '" style="text-align:center;color:var(--muted)">Tiada tempahan pada ' +
       esc(fmtDate(date)) + ' &mdash; semua slot kosong.</td></tr>';
 
     var list = (vFilter === 'semua' ? state.venues.filter(isActiveVenue) : [getVenue(vFilter)])
@@ -2147,9 +2339,13 @@ function seedData() {
           '<span class="vc-count">' + (wins.length ? wins.length + ' slot kosong' : 'Penuh') + '</span></div>' +
           (wins.length
             ? '<div class="chip-row">' + wins.map(function (w) {
-                return '<button class="chip chip-btn" data-act="pick-slot" data-args=\'' +
-                  '{"date":"' + date + '","start":"' + fromMin(w.s) + '","end":"' + fromMin(w.e) + '","venue":"' + esc(v.id) + '"}\'>' +
-                  esc(fmtTime(fromMin(w.s))) + ' &ndash; ' + esc(fmtTime(fromMin(w.e))) + '</button>';
+                var range = esc(fmtTime(fromMin(w.s))) + ' &ndash; ' + esc(fmtTime(fromMin(w.e)));
+                return ro
+                  /* Mod read-only (officer): paparan maklumat sahaja, bukan butang tempahan. */
+                  ? '<span class="chip ro" title="Slot kosong (rujukan sahaja)">' + range + '</span>'
+                  : '<button class="chip chip-btn" data-act="pick-slot" data-args=\'' +
+                    '{"date":"' + date + '","start":"' + fromMin(w.s) + '","end":"' + fromMin(w.e) + '","venue":"' + esc(v.id) + '"}\'>' +
+                    range + '</button>';
               }).join('') + '</div>'
             : '<div class="va-muted">Tiada ruang kosong pada tarikh ini.</div>') +
           '</div>';
@@ -2157,9 +2353,12 @@ function seedData() {
 
     return '<div class="card"><h3>Tempahan pada ' + esc(fmtDateLong(date)) + '</h3>' +
       '<div class="table-wrap"><table>' +
-      '<thead><tr><th>Masa</th><th>Aktiviti</th><th>Venue</th><th>Status</th><th>Tindakan</th></tr></thead>' +
+      '<thead><tr><th>Masa</th><th>Aktiviti</th><th>Venue</th><th>Status</th>' +
+      (ro ? '' : '<th>Tindakan</th>') + '</tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div></div>' +
-      '<div class="card"><h3>Slot Kosong (boleh diklik untuk tempah)</h3>' + list + '</div>';
+      '<div class="card"><h3>' +
+      (ro ? 'Slot Kosong (rujukan sahaja &mdash; tiada tempahan)' : 'Slot Kosong (boleh diklik untuk tempah)') +
+      '</h3>' + list + '</div>';
   }
 
   /* ============================================================
@@ -2533,19 +2732,34 @@ function seedData() {
         case 'submit-request': submitRequest(args.id); break;
         case 'open-review': openReview(args.id); break;
         case 'open-officers': openOfficers(args.id); break;
-        case 'edit-activity': show('create-activity', { id: args.id }); break;
-        case 'approve': approveRequest(args.id); break;
-        case 'reject': rejectRequest(args.id); break;
+        case 'edit-activity':
+          if (state.role === 'pa') { toast('Mod rujukan sahaja — pegawai tidak boleh mengubah aktiviti.', 'amber'); break; }
+          show('create-activity', { id: args.id });
+          break;
+        case 'approve': approveRequest(args.id, args.idx); break;
+        case 'reject': rejectRequest(args.id, args.idx); break;
         case 'delete-activity': deleteActivity(args.id); break;
         case 'edit-user': adminEdit.user = { idx: args.idx }; renderContent(); break;
         case 'cancel-user': adminEdit.user = null; renderContent(); break;
         case 'delete-user': deleteUser(args.idx); break;
 
-        /* --- Modul Pengurusan Venue --- */
-        case 'add-venue': openVenueModal(null); break;
-        case 'edit-venue': openVenueModal(args.id); break;
-        case 'toggle-venue': toggleVenueStatus(args.id); break;
-        case 'delete-venue': deleteVenue(args.id); break;
+        /* --- Modul Pengurusan Venue (Admin) --- */
+        case 'add-venue':
+          if (state.role !== 'admin') { toast('Pengurusan venue hanya untuk Admin.', 'amber'); break; }
+          openVenueModal(null);
+          break;
+        case 'edit-venue':
+          if (state.role !== 'admin') { toast('Pengurusan venue hanya untuk Admin.', 'amber'); break; }
+          openVenueModal(args.id);
+          break;
+        case 'toggle-venue':
+          if (state.role !== 'admin') { toast('Pengurusan venue hanya untuk Admin.', 'amber'); break; }
+          toggleVenueStatus(args.id);
+          break;
+        case 'delete-venue':
+          if (state.role !== 'admin') { toast('Pengurusan venue hanya untuk Admin.', 'amber'); break; }
+          deleteVenue(args.id);
+          break;
         case 'venue-swap-venue':
           venueSuggest.venue = !venueSuggest.venue;
           refreshVenueAvail();
@@ -2569,6 +2783,11 @@ function seedData() {
           showVenueCalendar({ venue: args.id, date: venueCalCtx.date || todayISO(), mode: 'mingguan' });
           break;
         case 'pick-slot':
+          /* Venue Calendar mod read-only (halaman officer/PA): penempahan disekat. */
+          if (state.role === 'pa') {
+            toast('Mod rujukan sahaja — pegawai tidak boleh menempah slot venue.', 'amber');
+            break;
+          }
           show('create-activity', {
             venue: args.venue || '', tarikh: args.date || todayISO(),
             masaMula: args.start || ''
@@ -2610,7 +2829,16 @@ function seedData() {
         case 'edit-role': adminEdit.roleIdx = args.idx; renderContent(); break;
         case 'cancel-role': adminEdit.roleIdx = null; renderContent(); break;
         case 'delete-role': deleteRole(args.idx); break;
-        case 'go-review': setRoleTo('pa', 'Permohonan telah dihantar. Simulasi: anda sekarang bertindak sebagai PA/NC.'); openReview(args.id); break;
+        case 'go-review': {
+          var grReq = getRequest(args.id);
+          var grOff = (grReq && grReq.officers && grReq.officers.length) ? grReq.officers[0].name : '';
+          if (grOff) { state.currentOfficer = grOff; save(); }
+          setRoleTo('pa', grOff
+            ? 'Permohonan telah dihantar. Simulasi: anda sekarang bertindak sebagai pegawai jemputan ' + grOff + ' (PA/NC) — kelulusan adalah individu.'
+            : 'Permohonan telah dihantar. Simulasi: anda sekarang bertindak sebagai PA/NC.');
+          openReview(args.id);
+          break;
+        }
         case 'go-calendar': show('calendar', { calMode: 'pegawai' }); break;
         case 'back-dashboard': show('dashboard'); break;
         case 'clear-audit':
