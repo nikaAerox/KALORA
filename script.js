@@ -96,8 +96,7 @@
     pa: [
       { id: 'dashboard', label: 'Dashboard' },
       { id: 'requests', label: 'Attendance Requests' },
-      { id: 'calendar', label: 'Calendar' },
-      { id: 'venue-calendar', label: 'Venue Calendar' }
+      { id: 'calendar', label: 'Calendar' }
     ],
     admin: [
       { id: 'dashboard', label: 'Dashboard' },
@@ -1527,7 +1526,14 @@ function seedData() {
       return (r.officers || []).some(function (o) { return o.name === me && o.status === 'pending'; });
     }
 
-    var rows = state.requests.map(function (r) {
+    var requestsList = state.requests;
+    if (isPa && me) {
+      requestsList = state.requests.filter(function (r) {
+        return (r.officers || []).some(function (o) { return o.name === me; });
+      });
+    }
+
+    var rows = requestsList.map(function (r) {
       var ratio = approvalRatio(r);
       var semak = '';
       if (isPa) {
